@@ -1,0 +1,2001 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="가계부 엑셀·CSV를 브라우저 안에서만 처리해 자산 흐름 생키 다이어그램으로 그려주는 단일 HTML 앱">
+<title>가계부 자산 흐름도 · 생키 다이어그램</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#0b1120;
+    --card:#111a2b;
+    --panel:#0f1729;
+    --line:#23324a;
+    --line-soft:#1b2941;
+    --text:#eef3fa;
+    --muted:#8b9bb4;
+    --dim:#64748b;
+    --accent:#d6fd70;
+    --accent-soft:rgba(214,253,112,.14);
+    --radius:20px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif;
+    font-size:15px;
+    line-height:1.5;
+    -webkit-text-size-adjust:100%;
+    -webkit-tap-highlight-color:transparent;
+    padding:28px 16px calc(48px + env(safe-area-inset-bottom));
+  }
+  .app{max-width:1060px;margin:0 auto;}
+  .muted{color:var(--muted);}
+  h1,h2,h3,p{margin:0;}
+
+  /* header */
+  header.top{margin-bottom:22px;}
+  .brandline{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+  .cardnum{
+    display:inline-flex;align-items:center;justify-content:center;
+    min-width:30px;height:24px;padding:0 7px;border-radius:7px;
+    background:var(--accent-soft);border:1px solid rgba(214,253,112,.28);
+    color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.02em;
+    font-variant-numeric:tabular-nums;
+  }
+  .eyebrow{
+    font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--dim);font-weight:600;
+  }
+  h1{font-size:25px;font-weight:800;letter-spacing:-.03em;line-height:1.25;}
+  .lede{margin-top:8px;font-size:13.5px;color:var(--muted);max-width:64ch;}
+
+  /* drop zone */
+  .drop{
+    margin-top:20px;
+    border:1.5px dashed #2c3d59;
+    border-radius:var(--radius);
+    background:linear-gradient(180deg,rgba(30,41,59,.42),rgba(15,23,41,.30));
+    padding:38px 20px;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color .18s ease,background .18s ease,transform .12s ease;
+  }
+  .drop:hover{border-color:#3c5279;background:rgba(30,41,59,.55);}
+  .drop.over{border-color:var(--accent);background:rgba(214,253,112,.07);}
+  .drop:active{transform:scale(.995);}
+  .drop .ic{display:block;margin:0 auto 12px;width:34px;height:34px;stroke:var(--muted);fill:none;stroke-width:1.6;}
+  .drop.over .ic{stroke:var(--accent);}
+  .drop-t{font-size:15px;font-weight:600;letter-spacing:-.01em;}
+  .drop-s{margin-top:6px;font-size:12.5px;color:var(--dim);}
+  .quick{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px;}
+
+  /* buttons */
+  .btn{
+    appearance:none;border:1px solid var(--line);background:#141f33;color:var(--text);
+    font-family:inherit;font-size:13px;font-weight:600;letter-spacing:-.01em;
+    padding:9px 14px;border-radius:10px;cursor:pointer;
+    transition:background .15s,border-color .15s,color .15s;
+    white-space:nowrap;
+  }
+  .btn:hover{background:#1a2740;border-color:#33456a;}
+  .btn:active{background:#0f1729;}
+  .btn.accent{border-color:rgba(214,253,112,.36);background:var(--accent-soft);color:var(--accent);}
+  .btn.accent:hover{background:rgba(214,253,112,.2);}
+  .btn.ghost{background:transparent;}
+  .btn[disabled]{opacity:.45;cursor:not-allowed;}
+
+  /* file meta */
+  .filemeta{
+    margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;
+    font-size:12px;color:var(--muted);
+  }
+  .chip{
+    display:inline-flex;align-items:center;gap:5px;
+    background:#141f33;border:1px solid var(--line-soft);border-radius:999px;
+    padding:4px 10px;font-size:11.5px;color:#b9c6d8;max-width:100%;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .chip b{color:var(--text);font-weight:600;}
+  .chip.warn{border-color:rgba(251,191,36,.35);color:#f3c969;background:rgba(251,191,36,.08);}
+
+  /* alert */
+  .alert{
+    margin-top:14px;border:1px solid rgba(248,113,113,.4);background:rgba(248,113,113,.09);
+    color:#f7a6a6;border-radius:12px;padding:12px 14px;font-size:13px;
+  }
+  .alert b{color:#ffd0d0;}
+
+  /* toolbar */
+  .toolbar{
+    margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;
+    padding:12px 14px;border:1px solid var(--line-soft);border-radius:14px;background:var(--panel);
+  }
+  .ctl{display:flex;flex-direction:column;gap:5px;min-width:0;}
+  .ctl>label{font-size:11px;letter-spacing:.06em;color:var(--dim);font-weight:600;}
+  select{
+    appearance:none;
+    font-family:inherit;font-size:13.5px;font-weight:600;color:var(--text);
+    background:#16213a url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M1 1l4 4 4-4' fill='none' stroke='%238b9bb4' stroke-width='1.6' stroke-linecap='round'/></svg>") no-repeat right 10px center;
+    border:1px solid var(--line);border-radius:9px;padding:8px 30px 8px 11px;
+    max-width:100%;cursor:pointer;
+  }
+  select:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
+  .spacer{flex:1 1 auto;}
+
+  /* card */
+  .card{
+    margin-top:18px;background:var(--card);border:1px solid var(--line-soft);
+    border-radius:var(--radius);padding:22px 22px 16px;
+    box-shadow:0 18px 40px -28px rgba(0,0,0,.9);
+  }
+  .card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;}
+  .card-title{display:flex;gap:11px;align-items:flex-start;min-width:0;}
+  .card-title h2{font-size:17px;font-weight:750;letter-spacing:-.02em;}
+  .card-sub{margin-top:3px;font-size:12.5px;color:var(--muted);}
+  .level{
+    flex:none;font-size:11px;font-weight:700;letter-spacing:.04em;
+    border:1px solid var(--line);border-radius:999px;padding:3px 9px;color:var(--muted);
+    background:#141f33;white-space:nowrap;
+  }
+
+  /* kpi */
+  .kpis{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:10px;
+    margin-top:18px;padding-top:16px;border-top:1px solid var(--line-soft);
+  }
+  .kpi{min-width:0;}
+  .kpi .k{font-size:11.5px;color:var(--dim);font-weight:600;letter-spacing:.02em;}
+  .kpi .v{
+    margin-top:3px;font-size:19px;font-weight:800;letter-spacing:-.035em;
+    font-variant-numeric:tabular-nums;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;
+  }
+  .kpi .v.acc{color:var(--accent);}
+  .kpi .s{margin-top:1px;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;}
+
+  /* takeaway */
+  .takeaway{
+    margin-top:16px;font-size:14.5px;font-weight:700;letter-spacing:-.02em;line-height:1.45;
+    color:#dfe7f2;
+  }
+  .takeaway b{color:var(--accent);font-weight:800;}
+
+  /* chart */
+  .chart{margin-top:6px;width:100%;position:relative;}
+  .chart svg{display:block;width:100%;height:auto;touch-action:manipulation;}
+  .chart .empty{padding:48px 0;text-align:center;color:var(--muted);font-size:13.5px;}
+
+  .note{margin-top:6px;font-size:11.5px;color:var(--dim);line-height:1.6;}
+  .note b{color:var(--muted);font-weight:600;}
+  .linkbtn{
+    margin-top:6px;appearance:none;font-family:inherit;font-size:11.5px;font-weight:650;
+    color:var(--accent);background:var(--accent-soft);border:1px solid rgba(214,253,112,.32);
+    border-radius:999px;padding:5px 11px;cursor:pointer;
+  }
+  .linkbtn:active{background:rgba(214,253,112,.24);}
+
+  /* tooltip */
+  .tip{
+    position:fixed;z-index:99;pointer-events:none;
+    background:#0a1220;border:1px solid #2d3f5d;border-radius:11px;
+    padding:9px 11px;max-width:260px;
+    box-shadow:0 14px 30px -12px rgba(0,0,0,.85);
+    font-size:12px;line-height:1.45;
+  }
+  .tip .t{font-weight:700;font-size:12.5px;letter-spacing:-.01em;}
+  .tip .v{margin-top:2px;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:700;}
+  .tip .v span{color:var(--muted);font-weight:600;margin-left:5px;}
+  .tip .s{margin-top:3px;color:var(--muted);font-size:11.5px;}
+
+  /* panels */
+  details.panel{
+    margin-top:12px;background:var(--panel);border:1px solid var(--line-soft);
+    border-radius:14px;overflow:hidden;
+  }
+  details.panel>summary{
+    cursor:pointer;padding:13px 16px;font-size:13.5px;font-weight:650;letter-spacing:-.01em;
+    display:flex;align-items:center;gap:8px;list-style:none;
+  }
+  details.panel>summary::-webkit-details-marker{display:none;}
+  details.panel>summary::before{
+    content:"";width:6px;height:6px;border-right:1.6px solid var(--dim);border-bottom:1.6px solid var(--dim);
+    transform:rotate(-45deg);transition:transform .16s;margin-right:2px;
+  }
+  details.panel[open]>summary::before{transform:rotate(45deg);}
+  details.panel>summary .tag{margin-left:auto;font-size:11px;color:var(--dim);font-weight:600;}
+  .panelbody{padding:2px 16px 16px;border-top:1px solid var(--line-soft);}
+  .panelbody .hint{font-size:11.5px;color:var(--dim);margin:12px 0 10px;line-height:1.6;}
+
+  .mapgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:10px;margin-top:12px;}
+  .mapgrid .ctl>label{font-size:11px;}
+
+  /* group editor */
+  .glist{margin-top:10px;display:flex;flex-direction:column;gap:2px;max-height:400px;overflow:auto;}
+  .grow{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(35,50,74,.5);}
+  .grow:last-child{border-bottom:none;}
+  .grow .gn{flex:1;min-width:0;}
+  .grow .gn b{font-size:13px;font-weight:650;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .grow .gn span{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;flex:none;}
+  .seg button{
+    appearance:none;border:none;background:#131e31;color:var(--muted);
+    font-family:inherit;font-size:11.5px;font-weight:650;padding:6px 9px;cursor:pointer;
+    border-right:1px solid var(--line);
+  }
+  .seg button:last-child{border-right:none;}
+  .seg button.on{background:var(--accent-soft);color:var(--accent);}
+  .seg button:active{background:#1a2740;}
+
+  /* table */
+  table.tbl{width:100%;border-collapse:collapse;margin-top:10px;font-size:12.5px;}
+  table.tbl th{
+    text-align:left;font-size:11px;color:var(--dim);font-weight:650;letter-spacing:.03em;
+    padding:7px 8px;border-bottom:1px solid var(--line);
+  }
+  table.tbl td{padding:7px 8px;border-bottom:1px solid rgba(35,50,74,.45);font-variant-numeric:tabular-nums;}
+  table.tbl td.num,table.tbl th.num{text-align:right;}
+  table.tbl tr.hl td{color:var(--accent);}
+
+  footer.foot{
+    margin-top:26px;font-size:11.5px;color:var(--dim);line-height:1.7;
+    border-top:1px solid var(--line-soft);padding-top:14px;
+  }
+  footer.foot b{color:var(--muted);}
+
+  /* mobile */
+  @media (max-width:640px){
+    body{padding:20px 12px calc(40px + env(safe-area-inset-bottom));font-size:14.5px;}
+    h1{font-size:21px;}
+    .lede{font-size:12.5px;}
+    .drop{padding:30px 14px;border-radius:16px;}
+    .card{padding:16px 14px 12px;border-radius:16px;}
+    .kpis{grid-template-columns:repeat(2,1fr);gap:12px 10px;}
+    .kpi .v{font-size:17px;}
+    .toolbar{padding:10px;gap:8px;}
+    .toolbar .btn{flex:1 1 auto;text-align:center;}
+    .takeaway{font-size:13.5px;}
+    .seg button{padding:6px 8px;font-size:11px;}
+    .grow{flex-wrap:wrap;}
+    details.panel>summary{padding:12px 14px;font-size:13px;}
+    .panelbody{padding:2px 12px 14px;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none !important;animation:none !important;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="top">
+    <div class="brandline">
+      <span class="eyebrow">ztd-charts · sankey · single-html</span>
+    </div>
+    <h1>가계부 자산 흐름도</h1>
+    <p class="lede">뱅크샐러드·편한가계부 엑셀(<b>.xlsx</b>·<b>.xls</b>)이나 <b>.csv</b>를 올리면 수입이 어디로 흘러가는지 생키 다이어그램으로 바로 그려 줍니다. 파일은 브라우저 안에서만 처리되고 어디로도 전송되지 않습니다.</p>
+  </header>
+
+  <div class="drop" id="drop" role="button" tabindex="0" aria-label="가계부 파일 선택 또는 끌어다 놓기">
+    <svg class="ic" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15" stroke-linecap="round"/>
+    </svg>
+    <p class="drop-t">파일을 여기로 끌어다 놓거나 눌러서 선택</p>
+    <p class="drop-s">.xlsx · .xls · .csv · 뱅크샐러드 내보내기 그대로 지원</p>
+    <input type="file" id="file" accept=".xlsx,.xls,.csv,text/csv" hidden>
+  </div>
+
+  <div class="quick">
+    <button class="btn accent" id="btnSample" type="button">샘플 데이터로 보기</button>
+    <button class="btn" id="btnSampleCsv" type="button">샘플 CSV 받기</button>
+  </div>
+
+  <div class="alert" id="alertBox" hidden></div>
+  <div class="filemeta" id="fileMeta" hidden></div>
+
+  <section class="toolbar" id="toolbar" hidden>
+    <div class="ctl">
+      <label for="selMonth">기간</label>
+      <select id="selMonth"></select>
+    </div>
+    <div class="ctl">
+      <label for="selTransfer">이체 처리</label>
+      <select id="selTransfer">
+        <option value="none">제외 (기본)</option>
+        <option value="keyword">투자·저축 키워드만 포함</option>
+        <option value="all">모두 포함</option>
+      </select>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn" id="btnSvg" type="button">SVG 저장</button>
+    <button class="btn" id="btnPng" type="button">PNG 저장</button>
+  </section>
+
+  <details class="panel" id="panelMap" hidden>
+    <summary>컬럼 매핑<span class="tag" id="mapTag"></span></summary>
+    <div class="panelbody">
+      <p class="hint">자동 인식 결과입니다. 다른 양식이면 여기서 한 번만 지정하면 다음 파일부터 자동 적용됩니다(이 브라우저에 저장).</p>
+      <div class="mapgrid" id="mapGrid"></div>
+      <p class="hint" id="mapHint"></p>
+    </div>
+  </details>
+
+  <section class="card" id="card" hidden>
+    <div class="card-head">
+      <div class="card-title">
+        <span class="cardnum">26</span>
+        <div>
+          <h2 id="cardTitle">자산 흐름도</h2>
+          <p class="card-sub" id="cardSub"></p>
+        </div>
+      </div>
+      <span class="level">심화</span>
+    </div>
+    <div class="kpis" id="kpis"></div>
+    <p class="takeaway" id="takeaway"></p>
+    <div class="chart" id="chart"><svg id="sankey" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="자산 흐름 생키 다이어그램"></svg></div>
+    <p class="note" id="chartNote"></p>
+  </section>
+
+  <details class="panel" id="panelGroup" hidden>
+    <summary>카테고리 그룹 편집<span class="tag" id="groupTag"></span></summary>
+    <div class="panelbody">
+      <p class="hint">대분류별로 고정비 / 생활·변동비 / 투자·저축 중 하나를 누르면 즉시 반영되고 이 브라우저에 저장됩니다.</p>
+      <div class="glist" id="groupList"></div>
+      <div style="margin-top:12px"><button class="btn ghost" id="btnGroupReset" type="button">자동 분류로 초기화</button></div>
+    </div>
+  </details>
+
+  <details class="panel" id="panelTable" hidden>
+    <summary>표로 보기<span class="tag" id="tableTag"></span></summary>
+    <div class="panelbody">
+      <table class="tbl" id="tbl">
+        <thead><tr><th>단계</th><th>이름</th><th class="num">금액</th><th class="num">비중</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </details>
+
+  <footer class="foot">
+    <b>개인정보</b> · 업로드한 파일은 이 브라우저의 메모리에서만 읽고 계산합니다. 서버 전송·저장은 없습니다.<br>
+    <b>저장되는 것</b> · 컬럼 매핑과 카테고리 그룹 설정만 이 브라우저(localStorage)에 남습니다. 새로고침해도 금액 데이터는 남지 않습니다.
+  </footer>
+</div>
+
+<div class="tip" id="tip" hidden></div>
+
+<script>
+(function(){
+'use strict';
+
+/* ============================================================
+   0. 상수
+   ============================================================ */
+var BG='#111a2b', TEXT='#eef3fa', MUTED='#8b9bb4', DIM='#6f8099';
+var ACCENT='#d6fd70', NODE='#c3d0e2', LINK='rgba(148,163,184,0.20)', LINK_HL='rgba(214,253,112,0.36)';
+var FONT="-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',Pretendard,'Malgun Gothic','Noto Sans KR',sans-serif";
+
+var GROUP_LABEL = { fixed:'고정비', variable:'생활·변동비', invest:'투자·저축', surplus:'남은 돈' };
+var GROUP_SHORT = { fixed:'고정비', variable:'생활비', invest:'투자·저축', surplus:'남은 돈' };
+var GROUP_ORDER = ['fixed','variable','invest'];
+
+var LS_COL='afv.colmap.v2', LS_GRP='afv.groupmap.v2', LS_OPT='afv.opts.v2';
+
+var RE_INVEST = /투자|적금|예금|연금|주식|etf|펀드|저축|청약|isa|irp|코인|비트코인|증권|채권|배당|자산관리|미국주식|해외주식|국내주식|연금저축|로보어드바이저|소액투자|달러저축/i;
+var RE_FIXED = /관리비|통신|휴대폰|핸드폰|인터넷|보험|월세|임대료|공과금|전기요금|전기|가스|수도|구독|정기결제|멤버십|렌탈|할부|대출|이자|세금|국민연금|건강보험|장기요양|학원|보육|어린이집|유치원|자동이체|넷플릭스|유튜브|스포티파이|왓챠|티빙|웨이브|쿠팡와우|아이클라우드|도시가스|재산세|자동차세|주민세|과태료|범칙금|주차비/i;
+
+/* ============================================================
+   1. 유틸
+   ============================================================ */
+function $(sel, root){ return (root||document).querySelector(sel); }
+function str(v){ return v==null ? '' : String(v).trim(); }
+function normTxt(v){ return str(v).replace(/\s+/g,'').toLowerCase(); }
+function normH(v){ return str(v).replace(/\s+/g,'').replace(/[()\[\]{}·\-_\/.,:*#]/g,'').toLowerCase(); }
+function esc(s){
+  return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+  });
+}
+function round1(v){ return Math.round(v*10)/10; }
+function sumArr(a){ var s=0; for (var i=0;i<a.length;i++) s+=a[i]; return s; }
+function sumMap(m){ var s=0; m.forEach(function(v){ s+=v; }); return s; }
+
+function fmtWon(v){
+  var n = Math.round(v||0);
+  var neg = n<0; n = Math.abs(n);
+  return (neg?'-':'') + n.toLocaleString('ko-KR') + '원';
+}
+function fmtCompact(v){
+  var n = Math.round(Math.abs(v||0));
+  var sign = (v||0) < 0 ? '-' : '';
+  if (n >= 100000000) return sign + trimZero(n/100000000) + '억';
+  if (n >= 10000) return sign + trimZero(n/10000) + '만';
+  if (n >= 1000) return sign + n.toLocaleString('ko-KR');
+  return sign + n;
+}
+function trimZero(x){
+  var s = (Math.round(x*10)/10).toFixed(1);
+  return s.replace(/\.0$/,'');
+}
+function pct(v){
+  if (!isFinite(v)) return '0%';
+  var s = (Math.round(v*1000)/10).toFixed(1);
+  return s.replace(/\.0$/,'') + '%';
+}
+function truncate(s, maxChars){
+  s = String(s==null?'':s);
+  if (maxChars <= 1) return '·';
+  if (s.length <= maxChars) return s;
+  return s.slice(0, maxChars-1) + '…';
+}
+function safeGet(k, dflt){
+  try{ var v = localStorage.getItem(k); return v ? JSON.parse(v) : dflt; }catch(e){ return dflt; }
+}
+function safeSet(k, v){
+  try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){}
+}
+function debounce(fn, ms){
+  var t=null;
+  return function(){ var a=arguments, ctx=this; clearTimeout(t); t=setTimeout(function(){ fn.apply(ctx,a); }, ms); };
+}
+
+/* ============================================================
+   2. 값 파싱 (금액 · 날짜)
+   ============================================================ */
+function parseAmount(v){
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  var s = String(v).trim();
+  if (!s) return 0;
+  var neg = false;
+  if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1,-1); }
+  if (/\-$/.test(s)) { neg = true; }
+  s = s.replace(/[₩$,\s원]/g,'').replace(/(?!^)[+\-]/g,'');
+  s = s.replace(/[^0-9.\-+]/g,'');
+  if (s === '' || s === '-' || s === '+') return 0;
+  var n = parseFloat(s);
+  if (!isFinite(n)) return 0;
+  return neg ? -Math.abs(n) : n;
+}
+
+function excelSerialToYmd(n){
+  var ms = Math.round((n - 25569) * 86400 * 1000);
+  var d = new Date(ms);
+  return { y:d.getUTCFullYear(), m:d.getUTCMonth()+1, d:d.getUTCDate() };
+}
+
+function parseDate(v){
+  if (v == null || v === '') return null;
+  if (v instanceof Date && !isNaN(v.getTime())) {
+    return { y:v.getFullYear(), m:v.getMonth()+1, d:v.getDate() };
+  }
+  if (typeof v === 'number'){
+    if (v > 20000 && v < 90000) return excelSerialToYmd(v);
+    return null;
+  }
+  var s = str(v);
+  if (!s) return null;
+  s = s.replace(/\(.*?\)/g,'').replace(/T/,' ').trim();
+
+  var m1 = s.match(/^(\d{4})\s*[.\-\/년]\s*(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})/);
+  if (m1) return validYmd(+m1[1], +m1[2], +m1[3]);
+
+  var m2 = s.match(/^(\d{2})\s*[.\-\/]\s*(\d{1,2})\s*[.\-\/]\s*(\d{1,2})$/);
+  if (m2) return validYmd(2000 + +m2[1], +m2[2], +m2[3]);
+
+  var m3 = s.match(/^(\d{1,2})\s*[\/\-]\s*(\d{1,2})\s*[\/\-]\s*(\d{4})/);
+  if (m3) return validYmd(+m3[3], +m3[1], +m3[2]);
+
+  var m4 = s.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (m4) return validYmd(+m4[1], +m4[2], +m4[3]);
+
+  var m5 = s.match(/^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/);
+  if (m5) return validYmd(+m5[1], +m5[2], +m5[3]);
+
+  var d = new Date(s);
+  if (!isNaN(d.getTime())) return { y:d.getFullYear(), m:d.getMonth()+1, d:d.getDate() };
+  return null;
+}
+function validYmd(y,m,d){
+  if (!y || !m || !d) return null;
+  if (m<1||m>12||d<1||d>31) return null;
+  return { y:y, m:m, d:d };
+}
+function ymOf(dt){
+  if (!dt) return null;
+  return dt.y + '-' + (dt.m<10?'0':'') + dt.m;
+}
+
+/* ============================================================
+   3. CSV 파서 (SheetJS 없이도 동작)
+   ============================================================ */
+function parseCsv(text){
+  text = String(text).replace(/^\uFEFF/,'');
+  var rows=[], row=[], field='', i=0, inQ=false, c;
+  while (i < text.length){
+    c = text.charAt(i);
+    if (inQ){
+      if (c === '"'){
+        if (text.charAt(i+1) === '"'){ field += '"'; i += 2; continue; }
+        inQ = false; i++; continue;
+      }
+      field += c; i++; continue;
+    }
+    if (c === '"'){ inQ = true; i++; continue; }
+    if (c === ','){ row.push(field); field=''; i++; continue; }
+    if (c === '\r'){ i++; continue; }
+    if (c === '\n'){ row.push(field); rows.push(row); row=[]; field=''; i++; continue; }
+    field += c; i++;
+  }
+  row.push(field);
+  if (!(row.length === 1 && row[0] === '')) rows.push(row);
+  // 완전히 빈 행 제거
+  return rows.filter(function(r){
+    for (var k=0;k<r.length;k++) if (str(r[k]) !== '') return true;
+    return false;
+  });
+}
+function csvFromRows(rows){
+  return rows.map(function(r){
+    return r.map(function(v){
+      var s = v == null ? '' : String(v);
+      return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+    }).join(',');
+  }).join('\r\n');
+}
+
+/* ============================================================
+   4. 헤더 인식 · 컬럼 매핑
+   ============================================================ */
+var ROLE_KEYS = {
+  date:         ['날짜','일자','거래일','거래일시','날짜시간','거래날짜','사용일','이용일','date'],
+  time:         ['시간','시각','거래시간','time'],
+  type:         ['타입','구분','입출금','수입지출','거래구분','유형','거래유형','입출구분','type'],
+  major:        ['대분류','카테고리','분류','대카테고리','상위분류','분류명','category'],
+  minor:        ['소분류','세분류','하위분류','소카테고리','세부분류','subcategory'],
+  content:      ['내용','적요','가맹점','상호','사용처','거래내용','거래처','description','item'],
+  amount:       ['금액','거래금액','결제금액','승인금액','원화금액','합계','amount','price'],
+  incomeAmount: ['입금액','입금','수입액'],
+  expenseAmount:['출금액','출금','지출액'],
+  currency:     ['화폐','통화','currency','단위'],
+  method:       ['결제수단','결제방법','카드','paymentmethod','method'],
+  memo:         ['메모','비고','note','memo','remark','tag']
+};
+var ROLE_LABEL = {
+  type:'구분 (수입/지출)', major:'카테고리 (대분류)', minor:'소분류',
+  amount:'금액', incomeAmount:'입금액 컬럼', expenseAmount:'출금액 컬럼',
+  date:'날짜', content:'내용'
+};
+
+function roleScore(cell){
+  var h = normH(cell);
+  if (!h) return null;
+  var best = null, bestScore = 0;
+  for (var role in ROLE_KEYS){
+    if (!Object.prototype.hasOwnProperty.call(ROLE_KEYS, role)) continue;
+    var keys = ROLE_KEYS[role];
+    for (var i=0;i<keys.length;i++){
+      var k = normH(keys[i]);
+      if (!k) continue;
+      var base = 0;
+      if (h === k) base = 100;
+      else if (h.indexOf(k) === 0) base = 78;
+      else if (h.indexOf(k) > -1) base = 60;
+      if (!base) continue;
+      // 목록 앞쪽(대표 이름)일수록 우선. 예: '대분류' > '분류', '금액' > '결제금액'
+      var sc = base - i * 0.5;
+      if (sc > bestScore){ bestScore = sc; best = role; }
+    }
+  }
+  return bestScore >= 50 ? { role:best, score:bestScore } : null;
+}
+function roleOf(cell){
+  var r = roleScore(cell);
+  return r ? r.role : null;
+}
+
+function detectHeader(matrix){
+  if (!matrix || !matrix.length) return null;
+  var best = null;
+  var limit = Math.min(matrix.length, 30);
+  for (var i=0;i<limit;i++){
+    var row = matrix[i];
+    if (!row) continue;
+    var map = {}, scores = {}, matched = 0;
+    for (var c=0;c<row.length;c++){
+      var rs = roleScore(row[c]);
+      if (!rs) continue;
+      if (!(rs.role in map)){ map[rs.role] = c; scores[rs.role] = rs.score; matched++; }
+      else if (rs.score > scores[rs.role]){ map[rs.role] = c; scores[rs.role] = rs.score; }
+    }
+    var hasAmount = ('amount' in map) || ('expenseAmount' in map) || ('incomeAmount' in map);
+    var score = matched*10
+      + (hasAmount ? 30 : 0)
+      + (('type' in map) ? 12 : 0)
+      + (('date' in map) ? 8 : 0)
+      + (('major' in map || 'minor' in map) ? 6 : 0);
+    var ok = matched >= 2 && (hasAmount || ('type' in map && 'date' in map));
+    if (ok && (!best || score > best.score)) best = { row:i, map:map, score:score, matched:matched };
+  }
+  return best;
+}
+
+function pickSheet(wb){
+  var names = (wb && wb.SheetNames) || [];
+  var list = [];
+  for (var i=0;i<names.length;i++){
+    var name = names[i];
+    var matrix = [];
+    try {
+      matrix = XLSX.utils.sheet_to_json(wb.Sheets[name], { header:1, raw:true, defval:null, blankrows:false });
+    } catch(e){ matrix = []; }
+    var h = detectHeader(matrix);
+    var nm = normTxt(name);
+    var ns = 0;
+    var isLedger = /가계부|내역/.test(nm);
+    if (isLedger) ns += 500;
+    if (/현황|요약|summary|dashboard|대시보드|자산/.test(nm) && !isLedger) ns -= 400;
+    list.push({ name:name, matrix:matrix, header:h, score: ns + (h ? h.score : -100000) });
+  }
+  list.sort(function(a,b){ return b.score - a.score; });
+  return list[0] || null;
+}
+
+/* ============================================================
+   5. 레코드 정규화
+   ============================================================ */
+function dirOf(typeText, rawAmount, split){
+  var s = normTxt(typeText);
+  if (s){
+    if (/이체|송금|계좌간|transfer/.test(s)) return 'transfer';
+    if (/수입|입금|매도|환불|환급|수령|충전/.test(s)) return 'income';
+    if (/지출|출금|결제|매수|사용|구매/.test(s)) return 'expense';
+  }
+  if (split) return split;
+  if (rawAmount < 0) return 'expense';
+  if (rawAmount > 0) return 'income';
+  return 'skip';
+}
+
+function toRecords(matrix, headerRow, map){
+  var rows = [];
+  for (var i=headerRow+1;i<matrix.length;i++){
+    var r = matrix[i];
+    if (!r || !r.length) continue;
+    var get = function(role){ return (map[role] != null) ? r[map[role]] : null; };
+
+    var raw = parseAmount(get('amount'));
+    var split = null, amount = raw;
+    var inc = parseAmount(get('incomeAmount'));
+    var exp = parseAmount(get('expenseAmount'));
+    if (inc){ amount = Math.abs(inc); split = 'income'; }
+    else if (exp){ amount = Math.abs(exp); split = 'expense'; }
+    amount = Math.abs(amount);
+    if (!amount || !isFinite(amount)) continue;
+
+    var major = str(get('major'));
+    var minor = str(get('minor'));
+    var content = str(get('content'));
+    var memo = str(get('memo'));
+    var typeText = str(get('type'));
+
+    if (!major && !minor && !content && !typeText) continue;
+    if (/^(합계|총계|소계|total|계$)/i.test(content)) continue;
+    if (/^(합계|총계|소계|계)$/.test(major)) continue;
+
+    var dt = parseDate(get('date'));
+    var dir = dirOf(typeText, raw, split);
+    if (dir === 'skip') continue;
+
+    rows.push({
+      ymd: dt ? (dt.y + '-' + pad2(dt.m) + '-' + pad2(dt.d)) : '',
+      ym: ymOf(dt),
+      dir: dir,
+      type: typeText,
+      major: major,
+      minor: minor,
+      content: content,
+      memo: memo,
+      method: str(get('method')),
+      amount: Math.round(amount)
+    });
+  }
+  return rows;
+}
+function pad2(n){ return (n<10?'0':'') + n; }
+
+/* 시그널이 전혀 없는 파일(전부 양수·구분 컬럼 없음)은 지출로 간주 */
+function repairDirection(rows, map){
+  if (map.type != null || map.incomeAmount != null || map.expenseAmount != null) return false;
+  if (!rows.length) return false;
+  var allIncome = rows.every(function(r){ return r.dir === 'income'; });
+  if (!allIncome) return false;
+  for (var i=0;i<rows.length;i++) rows[i].dir = 'expense';
+  return true;
+}
+
+/* ============================================================
+   6. 그룹 분류
+   ============================================================ */
+function groupOf(rec, groupMap){
+  var major = rec.major;
+  if (major && groupMap[major]) return groupMap[major];
+  var text = [rec.major, rec.minor, rec.content, rec.memo].join(' ').toLowerCase();
+  if (RE_INVEST.test(text)) return 'invest';
+  if (RE_FIXED.test(text)) return 'fixed';
+  return 'variable';
+}
+function looksInvest(rec){
+  return RE_INVEST.test([rec.major, rec.minor, rec.content, rec.memo].join(' '));
+}
+
+/* ============================================================
+   7. 집계 · 모델
+   ============================================================ */
+function capMap(map, max, minValue){
+  var arr = [];
+  map.forEach(function(v,k){ if (v>0) arr.push({ label:k, value:v }); });
+  arr.sort(function(a,b){ return b.value - a.value; });
+  if (minValue > 0){
+    var big = [], tiny = 0, tinyN = 0;
+    for (var i=0;i<arr.length;i++){
+      if (arr[i].value < minValue){ tiny += arr[i].value; tinyN++; }
+      else big.push(arr[i]);
+    }
+    arr = big;
+    if (tiny > 0) arr.push({ label:'기타 ' + tinyN + '건', value:tiny, rest:true });
+  }
+  if (arr.length <= max) return arr;
+  var top = arr.slice(0, max-1);
+  var rest = arr.slice(max-1);
+  var rv = 0;
+  for (var j=0;j<rest.length;j++) rv += rest[j].value;
+  top.push({ label:'기타 ' + rest.length + '건', value:rv, rest:true });
+  return top;
+}
+
+function computeItems(){
+  var o = state.opts;
+  var out = [], excluded = 0, investExcluded = 0;
+  for (var i=0;i<state.rows.length;i++){
+    var r = state.rows[i];
+    if (o.month !== 'all' && r.ym !== o.month) continue;
+    var dir = r.dir;
+    if (dir === 'transfer'){
+      var inv = looksInvest(r);
+      if (o.transfer === 'all') dir = 'expense';
+      else if (o.transfer === 'keyword' && inv) dir = 'expense';
+      else { excluded++; if (inv) investExcluded++; continue; }
+    }
+    if (dir === 'skip') continue;
+    out.push({
+      dir: dir,
+      group: dir === 'expense' ? groupOf(r, state.groupMap) : null,
+      major: r.major, minor: r.minor, content: r.content,
+      amount: r.amount, ym: r.ym
+    });
+  }
+  return { items: out, excluded: excluded, investExcluded: investExcluded };
+}
+
+function buildModel(items, compact){
+  var MAX_SRC = compact ? 3 : 4;
+  var MAX_CAT = compact ? 4 : 5;
+
+  var totalIn = 0, totalExp = 0, totalInvest = 0;
+  var incMap = new Map();
+  var gMap = { fixed:new Map(), variable:new Map(), invest:new Map() };
+  var subMap = { fixed:new Map(), variable:new Map(), invest:new Map() };
+
+  for (var i=0;i<items.length;i++){
+    var it = items[i];
+    if (it.dir === 'income'){
+      var k = it.major || it.minor || '수입';
+      incMap.set(k, (incMap.get(k)||0) + it.amount);
+      totalIn += it.amount;
+    } else {
+      var c = it.major || it.minor || it.content || '미분류';
+      var g = it.group;
+      gMap[g].set(c, (gMap[g].get(c)||0) + it.amount);
+      var sm = subMap[g];
+      if (!sm.has(c)) sm.set(c, new Map());
+      var sub = it.minor || it.content || '기타';
+      var smc = sm.get(c);
+      smc.set(sub, (smc.get(sub)||0) + it.amount);
+      totalExp += it.amount;
+      if (g === 'invest') totalInvest += it.amount;
+    }
+  }
+
+  var surplus = Math.max(0, totalIn - totalExp);
+  var deficit = Math.max(0, totalExp - totalIn);
+  var poolValue = Math.max(totalIn, totalExp);
+  if (poolValue <= 0) return null;
+
+  var nodes = [], links = [];
+  function push(stage, id, label, value, extra){
+    var n = { stage:stage, id:id, label:label, value:value };
+    if (extra) for (var kk in extra) if (Object.prototype.hasOwnProperty.call(extra,kk)) n[kk] = extra[kk];
+    nodes.push(n);
+    return n;
+  }
+
+  // stage 0 — 수입 항목
+  if (totalIn <= 0){
+    push(0, 'src:none', '수입 기록 없음', poolValue, { dim:true });
+  } else {
+    var srcs = capMap(incMap, MAX_SRC, 0);
+    for (var s=0;s<srcs.length;s++) push(0, 'src:'+s, srcs[s].label, srcs[s].value);
+    if (deficit > 0) push(0, 'src:def', '초과 지출', deficit, { warn:true });
+  }
+
+  // stage 1 — 월 총수입
+  push(1, 'pool', totalIn > 0 ? '월 총수입' : '지출 합계', poolValue, { main:true, short: totalIn > 0 ? '총수입' : '지출 합계' });
+
+  // stage 2 · 3 — 지출 그룹 → 세부 카테고리
+  var groupNodes = [];
+  var minCat = poolValue * 0.008;
+  for (var gi=0; gi<GROUP_ORDER.length; gi++){
+    var g = GROUP_ORDER[gi];
+    var m = gMap[g];
+    var v = sumMap(m);
+    if (v <= 0) continue;
+    var gn = push(2, 'g:'+g, GROUP_LABEL[g], v, { group:g, short:GROUP_SHORT[g] });
+    groupNodes.push(gn);
+    var cats = capMap(m, MAX_CAT, minCat);
+    for (var ci=0; ci<cats.length; ci++){
+      var subs = [];
+      if (!cats[ci].rest){
+        var sm2 = subMap[g].get(cats[ci].label);
+        if (sm2){
+          sm2.forEach(function(sv, sk){ if (sv > 0) subs.push({ label:sk, value:sv }); });
+          subs.sort(function(a,b){ return b.value - a.value; });
+          subs = subs.slice(0, 5);
+        }
+      }
+      push(3, 'c:'+g+':'+ci, cats[ci].label, cats[ci].value,
+        { group:g, parent:gn.id, rest:!!cats[ci].rest, subs:subs });
+    }
+  }
+  if (surplus > 0){
+    var sn = push(2, 'g:surplus', GROUP_LABEL.surplus, surplus, { group:'surplus', short:GROUP_SHORT.surplus });
+    groupNodes.push(sn);
+  }
+
+  // links
+  for (var n1=0;n1<nodes.length;n1++){
+    if (nodes[n1].stage === 0) links.push({ s:nodes[n1].id, t:'pool', value:nodes[n1].value });
+  }
+  for (var n2=0;n2<groupNodes.length;n2++){
+    links.push({ s:'pool', t:groupNodes[n2].id, value:groupNodes[n2].value });
+  }
+  for (var n3=0;n3<nodes.length;n3++){
+    if (nodes[n3].stage === 3) links.push({ s:nodes[n3].parent, t:nodes[n3].id, value:nodes[n3].value });
+  }
+
+  // 기본 강조: 가장 큰 지출 그룹
+  var hlNode = null, hlBest = -1;
+  for (var n4=0;n4<groupNodes.length;n4++){
+    if (groupNodes[n4].group === 'surplus') continue;
+    if (groupNodes[n4].value > hlBest){ hlBest = groupNodes[n4].value; hlNode = groupNodes[n4]; }
+  }
+  if (!hlNode && groupNodes.length) hlNode = groupNodes[0];
+
+  // 한 줄 요약
+  var ranked = groupNodes.filter(function(n){ return n.group !== 'surplus'; })
+    .slice().sort(function(a,b){ return b.value - a.value; });
+  var takeaway = '', topLabel = '';
+  if (ranked.length){
+    topLabel = ranked[0].label;
+    takeaway = '가 수입의 ' + pct(totalIn > 0 ? ranked[0].value/totalIn : 0) + '로 가장 큼';
+  } else {
+    takeaway = '이번 기간에는 지출 기록이 없습니다';
+  }
+  if (ranked.length && surplus > 0) takeaway += ', 남은 돈 ' + fmtCompact(surplus) + '원';
+  else if (ranked.length && deficit > 0) takeaway += ', 초과 지출 ' + fmtCompact(deficit) + '원';
+
+  return {
+    nodes: nodes,
+    links: links,
+    groupNodes: groupNodes,
+    poolValue: poolValue,
+    totalIn: totalIn,
+    totalExp: totalExp,
+    totalInvest: totalInvest,
+    surplus: surplus,
+    deficit: deficit,
+    savingsRate: totalIn > 0 ? totalInvest/totalIn : 0,
+    expenseRate: totalIn > 0 ? totalExp/totalIn : 0,
+    defaultHL: hlNode ? hlNode.id : null,
+    takeaway: takeaway,
+    topLabel: topLabel,
+    hasIncome: totalIn > 0
+  };
+}
+
+/* ============================================================
+   8. 레이아웃
+   ============================================================ */
+function layoutGraph(model, W, H, compact){
+  var pad = compact ? 12 : 14;
+  var nodeW = compact ? 8 : 11;
+  var mL = compact ? 60 : 96;
+  var mR = compact ? 78 : 132;
+  var top = compact ? 22 : 26;
+  var availH = Math.max(80, H - top - 8);
+  var x0 = mL;
+  var xEnd = Math.max(x0 + 120, W - mR - nodeW);
+  var span = xEnd - x0;
+  var xs = [x0, x0 + span*0.32, x0 + span*0.66, xEnd];
+
+  var stages = [[],[],[],[]];
+  for (var i=0;i<model.nodes.length;i++){
+    var n = model.nodes[i];
+    if (stages[n.stage]) stages[n.stage].push(n);
+  }
+  var byId = {};
+  for (var m0=0;m0<model.nodes.length;m0++) byId[model.nodes[m0].id] = model.nodes[m0];
+  var nMax = 1;
+  for (var s=0;s<4;s++) nMax = Math.max(nMax, stages[s].length);
+
+  var V = model.poolValue || 1;
+  var k = (availH - (nMax-1)*pad) / V;
+  if (!(k > 0)) k = 0.0001;
+
+  for (var si=0;si<4;si++){
+    var arr = stages[si];
+    if (!arr.length) continue;
+    var total = 0;
+    for (var a=0;a<arr.length;a++){ arr[a].h = Math.max(1.5, arr[a].value * k); total += arr[a].h; }
+    total += pad * (arr.length-1);
+    var y = top + Math.max(0, (availH - total)/2);
+    for (var b=0;b<arr.length;b++){
+      arr[b].x = xs[si]; arr[b].w = nodeW; arr[b].y = y;
+      y += arr[b].h + pad;
+    }
+  }
+
+  // 4단계는 부모 그룹 위치에 붙여 흐름이 수평으로 이어지게 한다
+  var c3 = stages[3];
+  if (c3.length){
+    var yCur = top;
+    for (var q=0;q<c3.length;q++){
+      var nd3 = c3[q];
+      var par = byId[nd3.parent];
+      yCur = Math.max(yCur, par ? par.y : top);
+      nd3.y = yCur;
+      yCur += nd3.h + pad;
+    }
+    var last3 = c3[c3.length-1];
+    var over = (last3.y + last3.h) - (top + availH);
+    if (over > 0){
+      var shift = Math.min(over, c3[0].y - top);
+      if (shift > 0){ for (var q2=0;q2<c3.length;q2++) c3[q2].y -= shift; }
+    }
+  }
+
+  var outs = {}, ins = {};
+  for (var li=0;li<model.links.length;li++){
+    var l = model.links[li];
+    l.th = Math.max(1, l.value * k);
+    (outs[l.s] = outs[l.s] || []).push(l);
+    (ins[l.t] = ins[l.t] || []).push(l);
+  }
+  for (var sid in outs){
+    if (!Object.prototype.hasOwnProperty.call(outs,sid)) continue;
+    var nd = byId[sid]; if (!nd) continue;
+    outs[sid].sort(function(A,B){ return (byId[A.t]?byId[A.t].y:0) - (byId[B.t]?byId[B.t].y:0); });
+    var cy = nd.y;
+    for (var oi=0;oi<outs[sid].length;oi++){ outs[sid][oi].sy = cy; cy += outs[sid][oi].th; }
+  }
+  for (var tid in ins){
+    if (!Object.prototype.hasOwnProperty.call(ins,tid)) continue;
+    var nd2 = byId[tid]; if (!nd2) continue;
+    ins[tid].sort(function(A,B){ return (byId[A.s]?byId[A.s].y:0) - (byId[B.s]?byId[B.s].y:0); });
+    var ty = nd2.y;
+    for (var ii=0;ii<ins[tid].length;ii++){ ins[tid][ii].ty = ty; ty += ins[tid][ii].th; }
+  }
+  for (var lj=0;lj<model.links.length;lj++){
+    var lk = model.links[lj];
+    var src = byId[lk.s], tgt = byId[lk.t];
+    if (!src || !tgt) continue;
+    lk.d = ribbonPath(src.x + src.w, lk.sy, tgt.x, lk.ty, lk.th);
+  }
+
+  return { W:W, H:H, compact:compact, model:model, stages:stages, byId:byId };
+}
+
+function ribbonPath(x0,y0,x1,y1,h){
+  var dx = Math.max(6, (x1-x0)*0.42);
+  return 'M' + round1(x0) + ',' + round1(y0)
+    + 'C' + round1(x0+dx) + ',' + round1(y0) + ' ' + round1(x1-dx) + ',' + round1(y1) + ' ' + round1(x1) + ',' + round1(y1)
+    + 'L' + round1(x1) + ',' + round1(y1+h)
+    + 'C' + round1(x1-dx) + ',' + round1(y1+h) + ' ' + round1(x0+dx) + ',' + round1(y0+h) + ' ' + round1(x0) + ',' + round1(y0+h)
+    + 'Z';
+}
+
+/* ============================================================
+   9. SVG 마크업
+   ============================================================ */
+function haloText(x, y, text, opt){
+  opt = opt || {};
+  var anchor = opt.anchor || 'start';
+  var size = opt.size || 11;
+  var weight = opt.weight || 500;
+  var fill = opt.fill || TEXT;
+  var base = 'x="' + round1(x) + '" y="' + round1(y) + '" text-anchor="' + anchor
+    + '" font-family="' + FONT + '" font-size="' + size + '" font-weight="' + weight + '"';
+  var inner = esc(text);
+  var out = '';
+  if (opt.halo !== false){
+    out += '<text ' + base + ' fill="' + BG + '" stroke="' + BG + '" stroke-width="3.4" stroke-linejoin="round" opacity="0.9">' + inner + '</text>';
+  }
+  out += '<text ' + base + ' fill="' + fill + '" class="' + (opt.cls || '') + '" data-base="' + fill + '">' + inner + '</text>';
+  return out;
+}
+
+function amtCandidates(v){
+  var s = fmtCompact(v);
+  var arr = [s + '원', s];
+  if (v >= 10000) arr.push(Math.round(v/10000) + '만');
+  return arr;
+}
+function fitAmt(v, maxLen){
+  var c = amtCandidates(v);
+  for (var i=0;i<c.length;i++){ if (maxLen >= c[i].length) return c[i]; }
+  return null;
+}
+/* 한글은 1em, 숫자·영문은 0.56em 정도로 보고 폭을 가늠한다 */
+function textWidth(s, size){
+  var w = 0;
+  for (var i=0;i<s.length;i++){
+    var c = s.charCodeAt(i);
+    var wide = (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0x2E80 && c <= 0xA4CF) || (c >= 0x1100 && c <= 0x115F) || (c >= 0xF900 && c <= 0xFAFF);
+    w += wide ? 1 : (c === 32 ? 0.3 : 0.56);
+  }
+  return w * size;
+}
+
+function svgMarkup(lay, hlIds){
+  var model = lay.model, compact = lay.compact, W = lay.W, H = lay.H;
+  var out = '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="' + BG + '"/>';
+
+  // 단계 제목
+  var stageNames = compact ? ['수입','총수입','그룹','세부'] : ['수입 항목','월 총수입','지출 그룹','세부 카테고리'];
+  var stageX = [null,null,null,null];
+  for (var i=0;i<model.nodes.length;i++){
+    var n = model.nodes[i];
+    if (stageX[n.stage] == null) stageX[n.stage] = n.x;
+  }
+  for (var s=0;s<4;s++){
+    if (stageX[s] == null) continue;
+    var anchor = (s === 0) ? 'end' : 'start';
+    var tx = (s === 0) ? stageX[s] - 2 : stageX[s] + 1;
+    out += '<text x="' + round1(tx) + '" y="' + (compact?13:15) + '" text-anchor="' + anchor
+      + '" font-family="' + FONT + '" font-size="' + (compact?9:9.5) + '" font-weight="650" letter-spacing="0.06em" fill="' + DIM + '">'
+      + esc(stageNames[s]) + '</text>';
+  }
+
+  // 링크
+  for (var l=0;l<model.links.length;l++){
+    var lk = model.links[l];
+    if (!lk.d) continue;
+    var on = hlIds && hlIds.size ? (hlIds.has(lk.s) && hlIds.has(lk.t)) : false;
+    out += '<path d="' + lk.d + '" fill="' + (on ? LINK_HL : LINK) + '" data-link="1" data-s="' + esc(lk.s)
+      + '" data-t="' + esc(lk.t) + '" data-base="' + (on ? LINK_HL : LINK) + '" stroke="none"/>';
+  }
+
+  // 노드
+  for (var ni=0;ni<model.nodes.length;ni++){
+    var nd = model.nodes[ni];
+    var isHL = hlIds && hlIds.size ? hlIds.has(nd.id) : false;
+    out += '<g data-node="' + esc(nd.id) + '">';
+    out += '<rect class="nrect" x="' + round1(nd.x) + '" y="' + round1(nd.y) + '" width="' + nd.w
+      + '" height="' + round1(nd.h) + '" rx="' + (nd.w>9?2.5:1.5) + '" fill="' + (isHL ? ACCENT : NODE)
+      + '" data-base="' + NODE + '"/>';
+    out += nodeLabel(nd, lay, isHL);
+    out += '</g>';
+  }
+  return out;
+}
+
+function nodeLabel(nd, lay, isHL){
+  var compact = lay.compact, W = lay.W;
+  var nameSize = nd.stage === 1 ? (compact?12:13)
+    : (nd.stage === 2 ? (compact?10.5:11.5) : (compact?9:10));
+  if (nd.h < 16) nameSize = Math.max(8, nameSize - 1);
+  var amtSize = compact ? 8.5 : 9.5;
+  var cx = nd.x + nd.w;
+  var cy = nd.y + nd.h/2;
+  var twoLine = nd.h >= (compact ? 20 : 24);
+  var width, x, anchor;
+
+  if (nd.stage === 0){ anchor = 'end'; x = nd.x - 7; width = nd.x - 9; }
+  else if (nd.stage === 3){ anchor = 'start'; x = cx + 7; width = W - cx - 11; }
+  else if (nd.stage === 1){ anchor = 'start'; x = cx + 7; width = Math.max(40, (lay.stages[2][0] ? lay.stages[2][0].x - cx - 12 : 120)); }
+  else { anchor = 'start'; x = cx + 7; width = Math.max(40, (lay.stages[3][0] ? lay.stages[3][0].x - cx - 12 : 100)); }
+
+  var maxChars = Math.max(2, Math.floor(width / (nameSize * 0.95)));
+  var label = truncate((compact && nd.short) ? nd.short : nd.label, maxChars);
+  var weight = nd.stage === 1 ? 750 : (nd.stage === 2 ? 650 : 550);
+  var fill = isHL ? ACCENT : (nd.warn ? '#f3c969' : (nd.dim ? DIM : TEXT));
+
+  var out = '';
+  var nameY = twoLine ? cy - 1.5 : cy + nameSize*0.35;
+  if (twoLine){
+    out += haloText(x, nameY, label, { anchor:anchor, size:nameSize, weight:weight, fill:fill, cls:'nlab' });
+    var amtTwo = fitAmt(nd.value, maxChars);
+    if (amtTwo) out += haloText(x, nameY + amtSize + 2.5, amtTwo,
+      { anchor:anchor, size:amtSize, weight:600, fill: MUTED, cls:'nlab' });
+  } else {
+    var room = maxChars - label.length - 1;
+    var amtOne = room >= 2 ? fitAmt(nd.value, room) : null;
+    if (!amtOne){
+      out += haloText(x, nameY, label, { anchor:anchor, size:nameSize, weight:weight, fill:fill, cls:'nlab' });
+    } else if (anchor === 'end'){
+      var wAmt = textWidth(amtOne, nameSize - 1);
+      out += haloText(x, nameY, amtOne, { anchor:'end', size:nameSize-1, weight:600, fill:MUTED, cls:'nlab' });
+      out += haloText(x - wAmt - 4, nameY, label, { anchor:'end', size:nameSize, weight:weight, fill:fill, cls:'nlab' });
+    } else {
+      var wName = textWidth(label, nameSize);
+      out += haloText(x, nameY, label, { anchor:'start', size:nameSize, weight:weight, fill:fill, cls:'nlab' });
+      out += haloText(x + wName + 4, nameY, amtOne, { anchor:'start', size:nameSize-1, weight:600, fill:MUTED, cls:'nlab' });
+    }
+  }
+  return out;
+}
+
+/* ============================================================
+   10. 상태
+   ============================================================ */
+var state = {
+  rows: [],
+  headers: [],
+  map: {},
+  fileName: '',
+  sheetName: '',
+  sample: false,
+  warnNoDirection: false,
+  opts: Object.assign({ month:'all', transfer:'none' }, safeGet(LS_OPT, {})),
+  groupMap: safeGet(LS_GRP, {}),
+  saved: safeGet(LS_COL, { bySig:{}, last:null }),
+  model: null,
+  lay: null,
+  hl: null,
+  pinned: null,
+  lastWidth: 0
+};
+
+/* ============================================================
+   11. 인제스트 (DOM 비의존)
+   ============================================================ */
+function sigOf(headers){
+  var s = headers.map(normH).join('|');
+  var h = 5381;
+  for (var i=0;i<s.length;i++){ h = ((h<<5) + h + s.charCodeAt(i)) | 0; }
+  return 's' + (h>>>0).toString(36) + '-' + s.length;
+}
+
+function applySavedMap(headerMap, headers){
+  var map = {};
+  for (var k in headerMap) if (Object.prototype.hasOwnProperty.call(headerMap,k)) map[k] = headerMap[k];
+  var pick = (state.saved && state.saved.bySig && state.saved.bySig[sigOf(headers)]) || (state.saved && state.saved.last);
+  if (!pick) return map;
+  for (var role in pick){
+    if (!Object.prototype.hasOwnProperty.call(pick, role)) continue;
+    var name = pick[role];
+    var idx = -1;
+    for (var i=0;i<headers.length;i++){ if (normH(headers[i]) === normH(name)) { idx = i; break; } }
+    if (idx >= 0) map[role] = idx;
+  }
+  return map;
+}
+
+function ingest(matrix, meta){
+  var header = (meta && meta.header) || detectHeader(matrix);
+  if (!header) throw new Error('헤더 행을 찾지 못했습니다. 첫 줄에 날짜·구분·금액 같은 열 이름이 있는 파일인지 확인해 주세요.');
+  var headers = (matrix[header.row] || []).map(function(v){ return str(v); });
+  var map = applySavedMap(header.map, headers);
+  var rows = toRecords(matrix, header.row, map);
+  if (!rows.length) throw new Error('금액이 있는 데이터 행을 찾지 못했습니다. 열 매핑을 확인해 주세요.');
+
+  state.rows = rows;
+  state.headers = headers;
+  state.map = map;
+  state.matrix = matrix;
+  state.headerRow = header.row;
+  state.fileName = (meta && meta.fileName) || '';
+  state.sheetName = (meta && meta.sheetName) || '';
+  state.sample = !!(meta && meta.sample);
+  state.warnNoDirection = repairDirection(rows, map);
+  state.pinned = null;
+  state.hl = null;
+
+  // 월 목록
+  var months = {};
+  for (var i=0;i<rows.length;i++){ if (rows[i].ym) months[rows[i].ym] = 1; }
+  var list = Object.keys(months).sort().reverse();
+  state.months = list;
+  var savedM = state.savedOpts && state.savedOpts.month;
+  if (savedM && (savedM === 'all' || list.indexOf(savedM) > -1)) state.opts.month = savedM;
+  else state.opts.month = list.length ? list[0] : 'all';
+  return rows;
+}
+
+/* ============================================================
+   12. 렌더링
+   ============================================================ */
+function renderAll(){
+  var res = computeItems();
+  if (!res.items.length){
+    $('#card').hidden = true;
+    $('#alertBox').hidden = false;
+    $('#alertBox').innerHTML = '<b>이 기간에는 표시할 항목이 없습니다.</b> 기간이나 이체 처리를 바꿔 보세요.';
+    return;
+  }
+  $('#alertBox').hidden = true;
+
+  var compactNow = ($('#chart').clientWidth || 800) < 620;
+  var model = buildModel(res.items, compactNow);
+  if (!model){
+    $('#card').hidden = true;
+    return;
+  }
+  state.model = model;
+  $('#card').hidden = false;
+  $('#toolbar').hidden = false;
+  $('#panelMap').hidden = false;
+  $('#panelGroup').hidden = false;
+  $('#panelTable').hidden = false;
+
+  renderSummary(model, res);
+  renderChart();
+  renderGroupEditor();
+  renderTable(model);
+  renderMapPanel();
+  renderMeta(res);
+}
+
+function renderSummary(model, res){
+  var periodTxt = state.opts.month === 'all' ? '전체 기간' : monthLabel(state.opts.month);
+  var nItems = (res.items || []).length;
+  $('#cardSub').textContent = periodTxt + ' · ' + nItems.toLocaleString('ko-KR') + '건 집계'
+    + (state.sheetName ? ' · ' + state.sheetName : '')
+    + (state.sample ? ' · 샘플' : '');
+
+  var kpis = [
+    { k:'총수입', v:fmtWon(model.totalIn), s: model.hasIncome ? '' : '수입 기록 없음' },
+    { k:'총지출', v:fmtWon(model.totalExp), s: model.hasIncome ? '수입의 ' + pct(model.expenseRate) : '' },
+    { k:'투자·저축', v:pct(model.savingsRate), s:fmtWon(model.totalInvest), acc: model.totalInvest > 0 },
+    { k: model.deficit > 0 ? '초과 지출' : '남은 돈',
+      v: fmtWon(model.deficit > 0 ? model.deficit : model.surplus),
+      s: model.deficit > 0 ? '수입보다 많음' : (model.hasIncome ? '다음 달로 이월' : '') }
+  ];
+  var html = '';
+  for (var i=0;i<kpis.length;i++){
+    var it = kpis[i];
+    html += '<div class="kpi"><div class="k">' + esc(it.k) + '</div>'
+      + '<div class="v' + (it.acc ? ' acc' : '') + '">' + esc(it.v) + '</div>'
+      + '<div class="s">' + esc(it.s || '\u00a0') + '</div></div>';
+  }
+  $('#kpis').innerHTML = html;
+
+  var tk = $('#takeaway');
+  if (model.topLabel){
+    tk.innerHTML = '<b>' + esc(model.topLabel) + '</b>' + esc(model.takeaway);
+  } else {
+    tk.textContent = model.takeaway;
+  }
+
+  var notes = [];
+  notes.push('막대 굵기 = 금액. 노드나 흐름을 누르면 그 줄기가 강조됩니다.');
+  if (res.excluded > 0){
+    notes.push('이체 ' + res.excluded + '건은 중복 집계를 막기 위해 제외했습니다'
+      + (res.investExcluded > 0 ? ' (그중 적금·투자 관련 ' + res.investExcluded + '건)' : '') + '.');
+  }
+  if (model.deficit > 0 && model.hasIncome) notes.push('지출이 수입보다 ' + fmtWon(model.deficit) + ' 많습니다.');
+  if (state.warnNoDirection) notes.push('수입/지출 구분 열이 없어 모든 금액을 지출로 처리했습니다.');
+  if (state.opts.transfer === 'all') notes.push('이체를 모두 포함하면 카드대금·계좌이체가 중복 집계될 수 있습니다.');
+  var noteHtml = notes.map(function(t){ return '<b>·</b> ' + esc(t); }).join('<br>');
+  if (state.opts.transfer === 'none' && res.investExcluded > 0){
+    noteHtml += '<br><button type="button" class="linkbtn" id="btnIncludeInvest">적금·투자 이체 '
+      + res.investExcluded + '건까지 포함해서 보기</button>';
+  }
+  $('#chartNote').innerHTML = noteHtml;
+}
+
+function renderChart(){
+  var wrap = $('#chart');
+  var W = Math.round(wrap.clientWidth || 0);
+  if (W < 200) W = 760;
+  var compact = W < 620;
+  var model = state.model;
+  if (!model) return;
+
+  var nMax = 1;
+  for (var s=0;s<4;s++){
+    var c = 0;
+    for (var i=0;i<model.nodes.length;i++) if (model.nodes[i].stage === s) c++;
+    nMax = Math.max(nMax, c);
+  }
+  var perNode = compact ? 30 : 34;
+  var minH = compact ? 400 : 440;
+  var maxH = compact ? 820 : 760;
+  var H = Math.round(Math.min(maxH, Math.max(minH, nMax*perNode + (compact?54:62))));
+
+  var lay = layoutGraph(model, W, H, compact);
+  state.lay = lay;
+  state.lastWidth = W;
+
+  var hlId = state.pinned || null;
+  var hlIds = hlId ? chainFor(model, hlId) : new Set();
+  if (!hlId && model.defaultHL) hlIds = chainFor(model, model.defaultHL);
+
+  var svg = $('#sankey');
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', H);
+  svg.setAttribute('aria-label', ariaSummary(model));
+  svg.innerHTML = svgMarkup(lay, hlIds);
+}
+
+/* 선택한 노드에서 흘러나가는 줄기만 강조한다 (들어오는 쪽은 맥락이라 중립 유지) */
+function chainFor(model, id){
+  var ids = new Set([id]);
+  var stack = [id], i, l, cur;
+  while (stack.length){
+    cur = stack.pop();
+    for (i=0;i<model.links.length;i++){
+      l = model.links[i];
+      if (l.s === cur && !ids.has(l.t)){ ids.add(l.t); stack.push(l.t); }
+    }
+  }
+  return ids;
+}
+
+function ariaSummary(model){
+  var parts = ['총수입 ' + fmtWon(model.totalIn), '총지출 ' + fmtWon(model.totalExp)];
+  for (var i=0;i<model.groupNodes.length;i++){
+    parts.push(model.groupNodes[i].label + ' ' + fmtWon(model.groupNodes[i].value));
+  }
+  return '자산 흐름 생키 다이어그램. ' + parts.join(', ');
+}
+
+function applyHighlight(id){
+  var svg = $('#sankey');
+  if (!svg || !state.model) return;
+  var ids = id ? chainFor(state.model, id) : new Set();
+  var nodeEls = svg.querySelectorAll('[data-node]');
+  for (var i=0;i<nodeEls.length;i++){
+    var g = nodeEls[i];
+    var on = ids.has(g.getAttribute('data-node'));
+    var rect = g.querySelector('.nrect');
+    if (rect) rect.setAttribute('fill', on ? ACCENT : (rect.getAttribute('data-base') || NODE));
+    var labs = g.querySelectorAll('.nlab');
+    for (var j=0;j<labs.length;j++){
+      var base = labs[j].getAttribute('data-base') || TEXT;
+      labs[j].setAttribute('fill', on ? ACCENT : base);
+    }
+  }
+  var links = svg.querySelectorAll('[data-link]');
+  for (var l=0;l<links.length;l++){
+    var p = links[l];
+    var on2 = ids.has(p.getAttribute('data-s')) && ids.has(p.getAttribute('data-t'));
+    p.setAttribute('fill', on2 ? LINK_HL : LINK);
+  }
+}
+
+function renderMeta(res){
+  var box = $('#fileMeta');
+  var parts = [];
+  if (state.fileName) parts.push('<span class="chip"><b>' + esc(state.fileName) + '</b></span>');
+  parts.push('<span class="chip">시트 <b>' + esc(state.sheetName || 'CSV') + '</b></span>');
+  parts.push('<span class="chip">헤더 <b>' + (state.headerRow + 1) + '행</b></span>');
+  parts.push('<span class="chip">인식 <b>' + state.rows.length + '건</b></span>');
+  if (state.warnNoDirection) parts.push('<span class="chip warn">구분 열 없음 · 모두 지출 처리</span>');
+  if (state.sample) parts.push('<span class="chip">샘플 데이터</span>');
+  box.innerHTML = parts.join('');
+  box.hidden = false;
+}
+
+function monthLabel(ym){
+  if (!ym) return '기간 미상';
+  var p = ym.split('-');
+  return p[0] + '년 ' + parseInt(p[1],10) + '월';
+}
+
+function renderMapPanel(){
+  var grid = $('#mapGrid');
+  var roles = ['type','major','minor','amount','incomeAmount','expenseAmount','date','content'];
+  var html = '';
+  for (var i=0;i<roles.length;i++){
+    var role = roles[i];
+    var cur = (state.map[role] != null) ? state.map[role] : '';
+    html += '<div class="ctl"><label for="map-' + role + '">' + esc(ROLE_LABEL[role]) + '</label>'
+      + '<select id="map-' + role + '" data-role="' + role + '">'
+      + '<option value="">— 없음 —</option>';
+    for (var h=0;h<state.headers.length;h++){
+      if (!state.headers[h]) continue;
+      html += '<option value="' + h + '"' + (String(cur) === String(h) ? ' selected' : '') + '>'
+        + esc(state.headers[h]) + '</option>';
+    }
+    html += '</select></div>';
+  }
+  grid.innerHTML = html;
+
+  var auto = ['type','major','amount','date'].filter(function(r){ return state.map[r] != null; }).length;
+  $('#mapTag').textContent = '자동 인식 ' + auto + '/4';
+  var names = [];
+  if (state.map.type != null) names.push('구분→' + state.headers[state.map.type]);
+  if (state.map.major != null) names.push('카테고리→' + state.headers[state.map.major]);
+  if (state.map.amount != null) names.push('금액→' + state.headers[state.map.amount]);
+  $('#mapHint').textContent = names.length ? '현재 적용: ' + names.join(' · ') : '자동 인식된 핵심 열이 없습니다. 직접 지정해 주세요.';
+}
+
+function renderGroupEditor(){
+  var box = $('#groupList');
+  var agg = new Map(), cnt = new Map(), votes = new Map();
+  for (var i=0;i<state.rows.length;i++){
+    var r = state.rows[i];
+    if (r.dir === 'income') continue;
+    var key = r.major || r.minor || r.content || '미분류';
+    agg.set(key, (agg.get(key)||0) + r.amount);
+    cnt.set(key, (cnt.get(key)||0) + 1);
+    var v = votes.get(key) || {};
+    var g = groupOf(r, state.groupMap);
+    v[g] = (v[g]||0) + 1;
+    votes.set(key, v);
+  }
+  var arr = [];
+  agg.forEach(function(v,k){ arr.push({ k:k, v:v, n:cnt.get(k)||0, votes:votes.get(k)||{} }); });
+  arr.sort(function(a,b){ return b.v - a.v; });
+
+  if (!arr.length){
+    box.innerHTML = '<p class="muted" style="font-size:12.5px">지출 기록이 없습니다.</p>';
+    return;
+  }
+  var total = 0;
+  for (var t=0;t<arr.length;t++) total += arr[t].v;
+
+  var html = '';
+  for (var a=0;a<arr.length;a++){
+    var row = arr[a];
+    var dominant = 'variable', best = -1;
+    for (var gk in row.votes){
+      if (!Object.prototype.hasOwnProperty.call(row.votes,gk)) continue;
+      if (row.votes[gk] > best){ best = row.votes[gk]; dominant = gk; }
+    }
+    html += '<div class="grow"><div class="gn"><b>' + esc(row.k) + '</b><span>'
+      + fmtWon(row.v) + ' · ' + pct(total>0?row.v/total:0) + ' · ' + row.n + '건</span></div>'
+      + '<div class="seg" data-major="' + esc(row.k) + '">';
+    for (var q=0;q<GROUP_ORDER.length;q++){
+      var gg = GROUP_ORDER[q];
+      html += '<button type="button" data-g="' + gg + '" class="' + (gg === dominant ? 'on' : '') + '">'
+        + esc(GROUP_LABEL[gg]) + '</button>';
+    }
+    html += '</div></div>';
+  }
+  box.innerHTML = html;
+  var custom = Object.keys(state.groupMap).length;
+  $('#groupTag').textContent = custom ? '직접 지정 ' + custom + '개' : '자동 분류';
+}
+
+function renderTable(model){
+  var rows = [];
+  var total = model.poolValue || 1;
+  for (var i=0;i<model.nodes.length;i++){
+    var n = model.nodes[i];
+    var stageName = ['수입 항목','총수입','그룹','세부 카테고리'][n.stage];
+    rows.push({ stage:stageName, label:n.label, value:n.value, share:n.value/total, hl: n.id === (state.pinned || model.defaultHL) });
+  }
+  var html = '';
+  for (var r=0;r<rows.length;r++){
+    html += '<tr' + (rows[r].hl ? ' class="hl"' : '') + '><td>' + esc(rows[r].stage) + '</td><td>'
+      + esc(rows[r].label) + '</td><td class="num">' + fmtWon(rows[r].value) + '</td><td class="num">'
+      + pct(rows[r].share) + '</td></tr>';
+  }
+  $('#tbl tbody').innerHTML = html;
+  $('#tableTag').textContent = rows.length + '행';
+}
+
+/* ============================================================
+   13. 툴팁
+   ============================================================ */
+var tipEl = null, tipHtml = '';
+function setTip(html){
+  if (!tipEl) tipEl = $('#tip');
+  if (html !== tipHtml){ tipEl.innerHTML = html; tipHtml = html; }
+  tipEl.hidden = false;
+}
+function moveTip(x, y){
+  if (!tipEl) tipEl = $('#tip');
+  var rect = tipEl.getBoundingClientRect();
+  var left = x + 14, top = y + 14;
+  if (left + rect.width > window.innerWidth - 8) left = window.innerWidth - rect.width - 8;
+  if (top + rect.height > window.innerHeight - 8) top = y - rect.height - 12;
+  if (left < 8) left = 8;
+  if (top < 8) top = 8;
+  tipEl.style.left = left + 'px';
+  tipEl.style.top = top + 'px';
+}
+function showTip(html, x, y){ setTip(html); moveTip(x, y); }
+function hideTip(){ if (tipEl) tipEl.hidden = true; }
+
+function tipForNode(id){
+  var model = state.model;
+  if (!model) return '';
+  var node = null;
+  for (var i=0;i<model.nodes.length;i++) if (model.nodes[i].id === id) node = model.nodes[i];
+  if (!node) return '';
+  var base = model.hasIncome ? model.totalIn : model.poolValue;
+  var share = base > 0 ? node.value/base : 0;
+  var html = '<div class="t">' + esc(node.label) + '</div>';
+  html += '<div class="v">' + fmtWon(node.value) + '<span>수입의 ' + pct(share) + '</span></div>';
+  if (node.stage === 2){
+    var kids = [];
+    for (var j=0;j<model.nodes.length;j++){
+      var c = model.nodes[j];
+      if (c.parent === node.id) kids.push(c);
+    }
+    kids.sort(function(a,b){ return b.value - a.value; });
+    if (kids.length){
+      var txt = kids.slice(0,3).map(function(k){ return k.label + ' ' + pct(node.value>0?k.value/node.value:0); }).join(' · ');
+      html += '<div class="s">' + esc(txt) + '</div>';
+    }
+  } else if (node.stage === 3 && node.subs && node.subs.length > 1){
+    var st = node.subs.slice(0,3).map(function(k){ return k.label + ' ' + fmtCompact(k.value) + '원'; }).join(' · ');
+    html += '<div class="s">' + esc(st) + '</div>';
+  }
+  return html;
+}
+
+function tipForLink(s, t){
+  var model = state.model;
+  if (!model) return '';
+  var amount = 0;
+  for (var i=0;i<model.links.length;i++){
+    if (model.links[i].s === s && model.links[i].t === t) amount = model.links[i].value;
+  }
+  var a = '?', b = '?';
+  for (var j=0;j<model.nodes.length;j++){
+    if (model.nodes[j].id === s) a = model.nodes[j].label;
+    if (model.nodes[j].id === t) b = model.nodes[j].label;
+  }
+  var base = model.hasIncome ? model.totalIn : model.poolValue;
+  return '<div class="t">' + esc(a) + ' → ' + esc(b) + '</div>'
+    + '<div class="v">' + fmtWon(amount) + '<span>수입의 ' + pct(base>0?amount/base:0) + '</span></div>';
+}
+
+/* ============================================================
+   14. 내보내기
+   ============================================================ */
+function download(blob, filename){
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 400);
+}
+
+function baseName(){
+  var p = state.opts.month === 'all' ? '전체' : state.opts.month;
+  return '자산흐름_' + p;
+}
+
+function buildSvgString(){
+  var svg = $('#sankey');
+  var clone = svg.cloneNode(true);
+  clone.setAttribute('xmlns','http://www.w3.org/2000/svg');
+  clone.setAttribute('xmlns:xlink','http://www.w3.org/1999/xlink');
+  var w = svg.getAttribute('width'), h = svg.getAttribute('height');
+  clone.setAttribute('width', w);
+  clone.setAttribute('height', h);
+  var s = new XMLSerializer().serializeToString(clone);
+  return '<?xml version="1.0" encoding="UTF-8"?>\n' + s;
+}
+
+function saveSvg(){
+  if (!state.model) return;
+  var s = buildSvgString();
+  download(new Blob([s], { type:'image/svg+xml;charset=utf-8' }), baseName() + '.svg');
+}
+
+function savePng(){
+  if (!state.model) return;
+  var svg = $('#sankey');
+  var w = parseFloat(svg.getAttribute('width')) || 760;
+  var h = parseFloat(svg.getAttribute('height')) || 480;
+  var str = buildSvgString();
+  var img = new Image();
+  var scale = Math.min(3, Math.max(2, 1600 / w));
+  img.onload = function(){
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.round(w * scale);
+    canvas.height = Math.round(h * scale);
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = BG;
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(function(blob){
+      if (blob) download(blob, baseName() + '.png');
+      else alert('PNG 저장에 실패했습니다. SVG로 저장해 주세요.');
+    }, 'image/png');
+  };
+  img.onerror = function(){
+    alert('이 브라우저에서는 PNG 변환이 막혀 있습니다. SVG 저장을 이용해 주세요.');
+  };
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(str);
+}
+
+/* ============================================================
+   15. 샘플 데이터 (뱅크샐러드 형식)
+   ============================================================ */
+var SAMPLE_HEADERS = ['날짜','시간','타입','대분류','소분류','내용','금액','화폐','결제수단','메모'];
+var SAMPLE_ROWS = [
+  ['2026-11-01','01:10','지출','주거·통신','관리비','11월 관리비 자동이체',-186400,'KRW','자동이체',''],
+  ['2026-11-01','09:05','지출','주거·통신','통신비','휴대폰 요금',-55000,'KRW','자동이체',''],
+  ['2026-11-01','09:06','지출','주거·통신','월세','월세 자동이체',-700000,'KRW','자동이체',''],
+  ['2026-11-01','10:00','수입','금융','예금이자','파킹통장 이자',12300,'KRW','계좌',''],
+  ['2026-11-02','20:31','지출','문화·여가','구독','넷플릭스',-13500,'KRW','카드',''],
+  ['2026-11-03','08:40','지출','식비','카페','아메리카노',-4800,'KRW','카드',''],
+  ['2026-11-03','12:20','지출','식비','점심','김치찌개',-9500,'KRW','카드',''],
+  ['2026-11-04','19:12','지출','식비','마트','주말 장보기',-168300,'KRW','카드',''],
+  ['2026-11-04','21:40','지출','식비','배달','치킨',-32000,'KRW','카드',''],
+  ['2026-11-05','07:50','지출','교통','버스','출근',-1500,'KRW','교통카드',''],
+  ['2026-11-06','10:00','지출','보험·세금','보험료','실손보험',-92000,'KRW','자동이체',''],
+  ['2026-11-07','11:30','수입','중고거래','판매','중고 자전거 판매',45000,'KRW','계좌',''],
+  ['2026-11-08','16:40','지출','교통','주유','주유소',-60000,'KRW','카드',''],
+  ['2026-11-08','19:10','지출','식비','외식','가족 저녁',-58000,'KRW','카드',''],
+  ['2026-11-09','09:15','지출','의료·건강','약국','감기약',-8900,'KRW','카드',''],
+  ['2026-11-10','12:00','수입','급여','급여','11월 급여',3850000,'KRW','계좌',''],
+  ['2026-11-10','14:00','지출','교육','학원비','중국어 학원',-350000,'KRW','카드',''],
+  ['2026-11-12','18:22','지출','식비','외식','저녁 모임',-42000,'KRW','카드',''],
+  ['2026-11-13','21:05','지출','식비','편의점','간식',-6300,'KRW','카드',''],
+  ['2026-11-14','20:00','지출','문화·여가','영화','영화 관람',-28000,'KRW','카드',''],
+  ['2026-11-15','10:30','이체','저축','적금','청년적금 자동이체',-300000,'KRW','자동이체',''],
+  ['2026-11-16','10:30','이체','투자','주식','미국주식 계좌 이체',-200000,'KRW','계좌',''],
+  ['2026-11-17','14:00','이체','이체','계좌이체','친구 계좌 이체',-50000,'KRW','계좌',''],
+  ['2026-11-18','19:40','지출','쇼핑','의류','겨울 외투',-179000,'KRW','카드',''],
+  ['2026-11-19','07:45','지출','교통','지하철','출근',-1550,'KRW','교통카드',''],
+  ['2026-11-20','12:30','지출','경조사','축의금','동료 결혼식',-100000,'KRW','계좌',''],
+  ['2026-11-21','15:20','지출','식비','카페','주말 카페',-12400,'KRW','카드',''],
+  ['2026-11-23','08:10','지출','교통','버스','출근',-22500,'KRW','교통카드',''],
+  ['2026-11-25','22:10','지출','식비','배달','야식',-54000,'KRW','카드',''],
+  ['2026-11-27','11:05','지출','식비','마트','생필픈 장보기',-94600,'KRW','카드',''],
+  ['2026-10-01','01:05','지출','주거·통신','관리비','10월 관리비 자동이체',-178200,'KRW','자동이체',''],
+  ['2026-10-01','09:00','지출','주거·통신','통신비','휴대폰 요금',-55000,'KRW','자동이체',''],
+  ['2026-10-01','09:01','지출','주거·통신','월세','월세 자동이체',-700000,'KRW','자동이체',''],
+  ['2026-10-02','21:10','지출','문화·여가','구독','넷플릭스',-13500,'KRW','카드',''],
+  ['2026-10-04','11:20','지출','식비','마트','장보기',-132400,'KRW','카드',''],
+  ['2026-10-06','12:30','지출','식비','점심','국밥',-9000,'KRW','카드',''],
+  ['2026-10-10','12:00','수입','급여','급여','10월 급여',3850000,'KRW','계좌',''],
+  ['2026-10-12','18:00','지출','식비','외식','회식',-56000,'KRW','카드',''],
+  ['2026-10-15','10:00','이체','저축','적금','청년적금 자동이체',-300000,'KRW','자동이체',''],
+  ['2026-10-18','09:30','지출','교통','주유','주유소',-55000,'KRW','카드',''],
+  ['2026-10-25','13:10','지출','의료·건강','병원','치과',-38000,'KRW','카드','']
+];
+
+function sampleMatrix(){
+  var m = [SAMPLE_HEADERS.slice()];
+  for (var i=0;i<SAMPLE_ROWS.length;i++) m.push(SAMPLE_ROWS[i].slice());
+  return m;
+}
+
+/* ============================================================
+   16. 파일 처리
+   ============================================================ */
+function showErr(msg){
+  var box = $('#alertBox');
+  box.hidden = false;
+  box.innerHTML = '<b>읽지 못했습니다.</b> ' + esc(msg);
+}
+
+function clearErr(){ $('#alertBox').hidden = true; }
+
+function handleFile(file){
+  clearErr();
+  var name = (file.name || '').toLowerCase();
+  var isCsv = /\.csv$/.test(name) || file.type === 'text/csv';
+  if (isCsv){
+    var fr = new FileReader();
+    fr.onload = function(){
+      try{
+        var text = decodeText(fr.result);
+        var matrix = parseCsv(text);
+        var header = detectHeader(matrix);
+        loadMatrix(matrix, { fileName:file.name, sheetName:'CSV', header:header });
+      }catch(e){ showErr(e.message || String(e)); }
+    };
+    fr.onerror = function(){ showErr('파일을 읽지 못했습니다.'); };
+    fr.readAsArrayBuffer(file);
+    return;
+  }
+  if (typeof XLSX === 'undefined'){
+    showErr('엑셀 파싱 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인하거나 CSV로 내보내 주세요.');
+    return;
+  }
+  var fr2 = new FileReader();
+  fr2.onload = function(){
+    try{
+      var wb = XLSX.read(new Uint8Array(fr2.result), { type:'array', cellDates:true });
+      var picked = pickSheet(wb);
+      if (!picked || !picked.header){
+        throw new Error('시트에서 날짜·타입·금액 같은 열 이름을 찾지 못했습니다.');
+      }
+      loadMatrix(picked.matrix, { fileName:file.name, sheetName:picked.name, header:picked.header });
+    }catch(e){ showErr(e.message || String(e)); }
+  };
+  fr2.onerror = function(){ showErr('파일을 읽지 못했습니다.'); };
+  fr2.readAsArrayBuffer(file);
+}
+
+function decodeText(buf){
+  var bytes = new Uint8Array(buf);
+  try{
+    return new TextDecoder('utf-8', { fatal:true }).decode(bytes);
+  }catch(e){
+    try{ return new TextDecoder('euc-kr').decode(bytes); }
+    catch(e2){ return new TextDecoder('utf-8').decode(bytes); }
+  }
+}
+
+function loadMatrix(matrix, meta){
+  try{
+    ingest(matrix, meta);
+    syncControls();
+    renderAll();
+  }catch(e){
+    showErr(e.message || String(e));
+  }
+}
+
+function syncControls(){
+  // 월 셀렉트
+  var sel = $('#selMonth');
+  var html = '<option value="all">전체 기간</option>';
+  var list = state.months || [];
+  for (var i=0;i<list.length;i++){
+    html += '<option value="' + list[i] + '"' + (state.opts.month === list[i] ? ' selected' : '') + '>'
+      + monthLabel(list[i]) + '</option>';
+  }
+  sel.innerHTML = html;
+  sel.value = state.opts.month;
+  $('#selTransfer').value = state.opts.transfer;
+  $('#toolbar').hidden = false;
+  renderMeta({ items:[], excluded:0, investExcluded:0 });
+  renderMapPanel();
+}
+
+/* ============================================================
+   17. 이벤트
+   ============================================================ */
+function init(){
+  var drop = $('#drop'), input = $('#file'), svg = $('#sankey');
+
+  if (!state.saved || typeof state.saved !== 'object' || !state.saved.bySig) state.saved = { bySig:{}, last:null };
+  if (!state.groupMap || typeof state.groupMap !== 'object') state.groupMap = {};
+  if (!state.opts || typeof state.opts !== 'object') state.opts = { month:'all', transfer:'none' };
+  if (!state.opts.transfer) state.opts.transfer = 'none';
+  if (!state.opts.month) state.opts.month = 'all';
+  state.savedOpts = safeGet(LS_OPT, null);
+
+  drop.addEventListener('click', function(){ input.click(); });
+  // 파일 입력의 클릭이 드롭존까지 올라와 다시 열리는 것을 막는다
+  input.addEventListener('click', function(e){ e.stopPropagation(); });
+  drop.addEventListener('keydown', function(e){ if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); input.click(); } });
+  input.addEventListener('change', function(e){
+    if (e.target.files && e.target.files[0]) handleFile(e.target.files[0]);
+    input.value = '';
+  });
+  ['dragenter','dragover'].forEach(function(t){
+    drop.addEventListener(t, function(e){ e.preventDefault(); e.stopPropagation(); drop.classList.add('over'); });
+  });
+  ['dragleave','dragend'].forEach(function(t){
+    drop.addEventListener(t, function(e){ e.preventDefault(); drop.classList.remove('over'); });
+  });
+  drop.addEventListener('drop', function(e){
+    e.preventDefault(); e.stopPropagation();
+    drop.classList.remove('over');
+    var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  });
+  window.addEventListener('dragover', function(e){ e.preventDefault(); });
+  window.addEventListener('drop', function(e){ e.preventDefault(); });
+
+  $('#btnSample').addEventListener('click', function(){
+    loadMatrix(sampleMatrix(), { fileName:'뱅크샐러드_샘플.csv', sheetName:'가계부 내역', sample:true });
+  });
+
+  $('#btnSampleCsv').addEventListener('click', function(){
+    var csv = '\uFEFF' + csvFromRows(sampleMatrix());
+    download(new Blob([csv], { type:'text/csv;charset=utf-8' }), '뱅크샐러드_샘플_가계부.csv');
+  });
+
+  $('#selMonth').addEventListener('change', function(e){
+    state.opts.month = e.target.value;
+    safeSet(LS_OPT, { month:state.opts.month, transfer:state.opts.transfer });
+    renderAll();
+  });
+  $('#selTransfer').addEventListener('change', function(e){
+    state.opts.transfer = e.target.value;
+    safeSet(LS_OPT, { month:state.opts.month, transfer:state.opts.transfer });
+    renderAll();
+  });
+
+  $('#btnSvg').addEventListener('click', saveSvg);
+  $('#btnPng').addEventListener('click', savePng);
+
+  $('#mapGrid').addEventListener('change', function(e){
+    var sel = e.target.closest ? e.target.closest('select[data-role]') : null;
+    if (!sel) return;
+    var role = sel.getAttribute('data-role');
+    var v = sel.value;
+    if (v === '') delete state.map[role];
+    else state.map[role] = parseInt(v, 10);
+
+    // 저장 (헤더 이름 기준)
+    var mapNames = {};
+    for (var k in state.map){
+      if (!Object.prototype.hasOwnProperty.call(state.map,k)) continue;
+      var idx = state.map[k];
+      if (state.headers[idx]) mapNames[k] = state.headers[idx];
+    }
+    state.saved = state.saved || { bySig:{}, last:null };
+    state.saved.bySig[sigOf(state.headers)] = mapNames;
+    state.saved.last = mapNames;
+    safeSet(LS_COL, state.saved);
+
+    try{
+      var rows = toRecords(state.matrix, state.headerRow, state.map);
+      if (!rows.length) throw new Error('선택한 조합에서는 금액 있는 행을 찾지 못했습니다.');
+      state.rows = rows;
+      state.warnNoDirection = repairDirection(rows, state.map);
+      var months = {};
+      for (var i=0;i<rows.length;i++) if (rows[i].ym) months[rows[i].ym] = 1;
+      state.months = Object.keys(months).sort().reverse();
+      if (state.opts.month !== 'all' && state.months.indexOf(state.opts.month) === -1){
+        state.opts.month = state.months.length ? state.months[0] : 'all';
+      }
+      clearErr();
+      renderAll();
+    }catch(err){
+      showErr(err.message || String(err));
+    }
+  });
+
+  $('#groupList').addEventListener('click', function(e){
+    var btn = e.target.closest ? e.target.closest('button[data-g]') : null;
+    if (!btn) return;
+    var seg = btn.closest('.seg');
+    if (!seg) return;
+    var major = seg.getAttribute('data-major');
+    state.groupMap[major] = btn.getAttribute('data-g');
+    safeSet(LS_GRP, state.groupMap);
+    renderAll();
+  });
+
+  $('#btnGroupReset').addEventListener('click', function(){
+    state.groupMap = {};
+    safeSet(LS_GRP, state.groupMap);
+    renderAll();
+  });
+
+  $('#chartNote').addEventListener('click', function(e){
+    if (!e.target || !e.target.id || e.target.id !== 'btnIncludeInvest') return;
+    state.opts.transfer = 'keyword';
+    safeSet(LS_OPT, { month:state.opts.month, transfer:state.opts.transfer });
+    $('#selTransfer').value = 'keyword';
+    renderAll();
+  });
+
+  // 차트 인터랙션
+  function nodeFromEvent(e){
+    var t = e.target;
+    return (t && t.closest) ? t.closest('[data-node]') : null;
+  }
+  function linkFromEvent(e){
+    var t = e.target;
+    return (t && t.closest) ? t.closest('[data-link]') : null;
+  }
+
+  svg.addEventListener('pointerover', function(e){
+    var g = nodeFromEvent(e);
+    var l = linkFromEvent(e);
+    if (g){
+      var id = g.getAttribute('data-node');
+      applyHighlight(id);
+      showTip(tipForNode(id), e.clientX, e.clientY);
+    } else if (l && l.getAttribute('data-link')){
+      applyHighlight(l.getAttribute('data-s'));
+      showTip(tipForLink(l.getAttribute('data-s'), l.getAttribute('data-t')), e.clientX, e.clientY);
+    }
+  });
+  svg.addEventListener('pointermove', function(e){
+    if (!tipEl || tipEl.hidden) return;
+    moveTip(e.clientX, e.clientY);
+  });
+  svg.addEventListener('pointerout', function(e){
+    var to = e.relatedTarget;
+    if (to && to.closest && (to.closest('[data-node]') || to.closest('[data-link]'))) return;
+    hideTip();
+    applyHighlight(state.pinned || (state.model ? state.model.defaultHL : null));
+  });
+  svg.addEventListener('pointerleave', function(){
+    hideTip();
+    applyHighlight(state.pinned || (state.model ? state.model.defaultHL : null));
+  });
+  svg.addEventListener('click', function(e){
+    var g = nodeFromEvent(e);
+    var id = g ? g.getAttribute('data-node') : null;
+    if (id && id !== state.pinned){
+      state.pinned = id;
+      applyHighlight(id);
+      if (state.model) renderTable(state.model);
+    } else if (state.pinned){
+      state.pinned = null;
+      applyHighlight(state.model ? state.model.defaultHL : null);
+      if (state.model) renderTable(state.model);
+    }
+  });
+  document.addEventListener('click', function(e){
+    if (!e.target.closest || !e.target.closest('#chart')) hideTip();
+  });
+
+  var onResize = debounce(function(){
+    if (!state.model) return;
+    var w = Math.round($('#chart').clientWidth || 0);
+    if (Math.abs(w - state.lastWidth) < 12) return;
+    renderChart();
+  }, 180);
+  window.addEventListener('resize', onResize);
+  window.addEventListener('orientationchange', function(){ setTimeout(onResize, 260); });
+
+  // SheetJS 폴백 CDN
+  if (typeof XLSX === 'undefined'){
+    var s = document.createElement('script');
+    s.src = 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js';
+    s.onerror = function(){};
+    document.head.appendChild(s);
+  }
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+else init();
+
+/* ============================================================
+   18. 테스트용 노출
+   ============================================================ */
+window.AFV = {
+  parseCsv: parseCsv,
+  csvFromRows: csvFromRows,
+  detectHeader: detectHeader,
+  pickSheet: pickSheet,
+  toRecords: toRecords,
+  parseAmount: parseAmount,
+  parseDate: parseDate,
+  groupOf: groupOf,
+  computeItems: computeItems,
+  buildModel: buildModel,
+  layoutGraph: layoutGraph,
+  svgMarkup: svgMarkup,
+  chainFor: chainFor,
+  ingest: ingest,
+  ingestRows: function(matrix, meta){ return ingest(matrix, meta); },
+  loadMatrix: loadMatrix,
+  renderAll: renderAll,
+  sampleMatrix: sampleMatrix,
+  state: state,
+  setState: function(partial){ Object.assign(state, partial); }
+};
+
+})();
+</script>
+</body>
+</html>
